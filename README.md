@@ -66,9 +66,9 @@ git clone https://github.com/yadrophp/framework.git ваш-проект
 cd ваш-проект
 
 # Настройте окружение
-cp env.example env.local
+cp .env.example .env.local
 
-# Отредактируйте env.local под ваши нужды
+# Отредактируйте .env.local под нужды разработки
 # Укажите настройки базы данных, режим работы и т.д.
 ```
 
@@ -85,14 +85,14 @@ composer create-project yadro/framework ваш-проект
 php -S localhost:8000 -t public
 
 # Или используйте CLI для управления проектом
-php bin/console/jit_manager.php --optimize
+php bin/console/jit_manager.php help
 ```
 
 ##### Продакшн (production mode):
 ```bash
 # Настройте веб-сервер (Apache/Nginx) на директорию public/
-# Установите env.local с режимом PRODUCTION
-# Включите OPcache и JIT в настройках PHP
+# Удалите .env.local
+# Включите OPcache, JIT и Gzip в настройках PHP
 ```
 
 #### Ваш первый контроллер
@@ -141,13 +141,12 @@ class HelloController extends ControllerRendering
 ```php
 <?php
 return [
-    'web' => [
-        ['GET', '/hello', 'App\Controller\Web\HelloController::index'],
-        ['GET', '/api/hello', 'App\Controller\Web\HelloController::apiExample'],
+    [
+        'path' => '/',
+        'http_method' => 'GET',
+        'controller' => 'App\Controller\Web\MainController',
+        'controller_method' => 'index'
     ],
-    'api' => [
-        // API маршруты
-    ]
 ];
 ```
 
@@ -178,17 +177,18 @@ return [
 
 **Слоистая архитектура:**
 ```
-Bootstrap    → Автозагрузка, конфигурация, инициализация
-Core         → Ядро фреймворка (роутинг, DI, middleware)
-Infrastructure → Инфраструктура (БД, кэш, файловая система)
-App          → Ваше приложение (контроллеры, сервисы, модели)
+Bootstrap            → Автозагрузка, конфигурация, инициализация
+Core                 → Ядро фреймворка (роутинг, DI, middleware)
+Infrastructure       → Инфраструктура (БД, кэш, файловая система)
+App                  → Ваше приложение (контроллеры, сервисы, модели)
+Domain (опционально) → Предметная область (DTO, бизнес-логика)
 ```
 
 **Шаблоны проектирования:**
 - **Chain of Responsibility:** Конвейер middleware-компонентов
 - **Dependency Injection:** Внедрение зависимостей через конструктор
 - **State:** Выбор сценария выполнения (dev/test/production)
-- **Factory:** Создание объектов через контейнер
+- **Reflecting Factory:** Создание объектов через контейнер при помощи ReflectionAPI
 - **Strategy:** Различные реализации сервисов
 
 #### 🔒 Безопасность
@@ -199,11 +199,81 @@ App          → Ваше приложение (контроллеры, серв
    ```php
    // configs/content_security_policy.php
    return [
-       'default-src' => "'self'",
-       'script-src' => "'self' 'unsafe-inline'",
-       'style-src' => "'self' 'unsafe-inline'",
-       'img-src' => "'self' data: https:",
-   ];
+    'production' => [
+        'default-src' => ["'self'"],
+        
+        'script-src' => [
+            "'self'",
+            'https://cdn.jsdelivr.net',
+            'https://code.jquery.com',
+            'https://unpkg.com',
+            "'nonce-{nonce}'",
+            "'strict-dynamic'"
+        ],
+        
+        'style-src' => [
+            "'self'",
+            'https://cdn.jsdelivr.net',
+            'https://cdnjs.cloudflare.com',
+            'https://fonts.googleapis.com',
+            "'nonce-{nonce}'"
+        ],
+        
+        'img-src' => [
+            "'self'",
+            'data:',
+            'blob:',
+            'https:'
+        ],
+        
+        'font-src' => [
+            "'self'",
+            'data:',
+            'https://fonts.gstatic.com',
+            'https://cdnjs.cloudflare.com'
+        ],
+        
+        'connect-src' => [
+            "'self'",
+            'https://cdn.jsdelivr.net',
+            'https://code.jquery.com'
+        ],
+        
+        'worker-src' => ["'self'", 'blob:'],
+        'child-src' => ["'self'", 'blob:'],
+        'frame-src' => ["'self'"],
+        
+        'frame-ancestors' => ["'none'"],
+        'base-uri' => ["'self'"],
+        'form-action' => ["'self'"],
+        'object-src' => ["'none'"],
+        'manifest-src' => ["'self'"],
+        
+        'report-uri' => ['/csp-report'],
+        'report-to' => ['csp-endpoint']
+    ],
+    
+    'development' => [
+        'default-src' => ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+        'script-src' => ["'self'", "'unsafe-inline'", "'unsafe-eval'", 'https:'],
+        'style-src' => ["'self'", "'unsafe-inline'", 'https:'],
+        'img-src' => ["'self'", 'data:', 'blob:', 'https:'],
+        'font-src' => ["'self'", 'data:', 'https:'],
+        'connect-src' => ["'self'", 'https:'],
+        'worker-src' => ["'self'", 'blob:'],
+        'frame-src' => ["'self'"],
+        'frame-ancestors' => ["'none'"]
+    ],
+    
+    'test' => [
+        'default-src' => ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+        'script-src' => ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+        'style-src' => ["'self'", "'unsafe-inline'"],
+        'img-src' => ["'self'", 'data:', 'blob:', 'https:'],
+        'font-src' => ["'self'", 'data:', 'https:'],
+        'frame-ancestors' => ["'none'"]
+    ]
+    ];
    ```
 
 2. **CORS (Cross-Origin Resource Sharing)**
@@ -212,17 +282,17 @@ App          → Ваше приложение (контроллеры, серв
    - Предзапросы (preflight) поддержка
 
 3. **CSRF Protection**
-   - Автоматическая генерация токенов
+   - Генерация токенов
    - Валидация всех POST/PUT/PATCH/DELETE запросов
    - Интеграция с формами
 
 4. **Аутентификация и авторизация**
-   - JWT или сессионная аутентификация
+   - Сессионная аутентификация
    - Ролевая модель доступа
    - Атрибуты контроля доступа к методам
 
 5. **Защита входных данных**
-   - Автоматическое экранирование HTML
+   - Поддержка экранирования HTML, SQL
    - Валидация типов данных
    - Санитизация пользовательского ввода
 
@@ -236,10 +306,8 @@ App          → Ваше приложение (контроллеры, серв
 **Оптимизации:**
 
 1. **JIT-компиляция (PHP 8.5)**
-   ```php
-   // bin/console/jit_manager.php
-   opcache_compile_file($file); // Предварительная компиляция
-   ```
+   - Включение/выключение предварительной компиляции
+   - Ускорение выполнения объемных частей фреймворка
 
 2. **Многоуровневое кэширование**
    - Кэш маршрутов
@@ -254,8 +322,7 @@ App          → Ваше приложение (контроллеры, серв
 
 4. **Оптимизированный роутер**
    - Быстрый поиск маршрутов
-   - Кэширование дерева маршрутов
-   - Поддержка параметров и ограничений
+   - Поддержка HTTP-методов, параметров и ограничений
 
 #### 🛠️ Инструменты разработчика
 
@@ -264,13 +331,10 @@ App          → Ваше приложение (контроллеры, серв
 1. **CLI Консоль**
    ```bash
    # Оптимизация производительности
-   php bin/console/jit_manager.php --optimize
+   php bin/console/jit_manager.php optimize
    
-   # Генерация документации API
-   php bin/console/api_doc_generator.php
-   
-   # Очистка кэша
-   php bin/console/cache_clear.php
+   # Прогрев OpCache
+   php bin/console/preload.php
    ```
 
 2. **Dev Mode Features**
@@ -279,12 +343,11 @@ App          → Ваше приложение (контроллеры, серв
    - Отладчик переменных
    - Мониторинг ресурсов
 
-3. **Assets Watcher**
+3. **Assets Watcher (скоро)**
    - Автоматическая перекомпиляция CSS/JS
    - Hot reload для разработки
-   - Минификация ресурсов
 
-4. **API Documentation Generator**
+4. **API Documentation Generator (скоро)**
    - Автогенерация документации
    - Swagger/OpenAPI совместимость
    - Интерактивная документация
@@ -295,66 +358,103 @@ App          → Ваше приложение (контроллеры, серв
 
 ```php
 <?php
-namespace App\Service;
+namespace App\Controller\Web;
 
-use Infrastructure\DataBase\MySQLConnector;
+use Core\Controller\ControllerRendering;
+use Core\Controller\ControllerResponseInterface;
+use Core\Security\AuthAttribute;
+use Core\Service\Renderer;
+use Core\Service\AuthService;
 use Core\Service\DBConnectionManager;
 
-class UserService
+class UserController extends ControllerRendering
 {
-    private MySQLConnector $db;
-    
-    public function __construct(DBConnectionManager $dbManager)
+    public function __construct(
+        Renderer $renderer,
+        private AuthService $auth,
+        private DBConnectionManager $dbManager
+    )
     {
-        $this->db = $dbManager->getConnection('default');
+        parent::__construct($renderer);
     }
-    
-    public function getUsers(int $limit = 10): array
-    {
-        $query = "SELECT id, username, email FROM users 
-                  WHERE active = 1 
-                  ORDER BY created_at DESC 
-                  LIMIT ?";
-        
-        return $this->db->executePrepared($query, [$limit]);
-    }
-    
-    public function createUser(array $data): int
-    {
-        $query = "INSERT INTO users (username, email, password_hash) 
-                  VALUES (?, ?, ?)";
-        
-        return $this->db->executePrepared(
-            $query, 
-            [
-                $data['username'],
-                $data['email'],
-                password_hash($data['password'], PASSWORD_BCRYPT)
-            ]
-        );
-    }
-}
-```
 
-**Миграции:**
-```php
-// Пример миграции
-class CreateUsersTable
-{
-    public function up(MySQLConnector $db): void
+    #[AuthAttribute(table: 'employees', roles: ['admin', 'manager'], status: 'active')]
+    public function index(): ControllerResponseInterface
     {
-        $db->execute("
-            CREATE TABLE users (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                username VARCHAR(50) NOT NULL UNIQUE,
-                email VARCHAR(100) NOT NULL UNIQUE,
-                password_hash VARCHAR(255) NOT NULL,
-                active BOOLEAN DEFAULT TRUE,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP 
-                             ON UPDATE CURRENT_TIMESTAMP
-            ) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
-        ");
+        $user = $this->auth->getUser();
+
+        $dbConnection = $this->dbManager->getConnection();
+
+        $userId = $this->auth->getUser()->getId();
+        
+        $sqlGetEmployees = "SELECT * FROM employees WHERE id = {$userId} LIMIT 1";
+        $result = $dbConnection->query($sqlGetEmployees);
+
+        $userData = $result[0];
+
+        $data = [
+            'title' => 'Профиль',
+            'company_name' => 'YadroPHP',
+            'user_session' => [
+                'role' => $user->getRole(),
+                'name' => $user->getName(),
+                'email' => $user->getEmail(),
+                'avatar' => $user->getAvatar()
+            ],
+
+            'user_data' => $userData,
+
+            'breadcrumbs' => [
+                [
+                    'name'  => 'folder',
+                    'title' => 'Профиль'
+                ]
+            ]
+        ];
+
+        return $this->render('pages/profile.html.php', $data);
+    }
+
+    #[AuthAttribute(table: 'employees', roles: ['admin', 'manager'], status: 'active')]
+    public function edit(): ControllerResponseInterface
+    {
+        $user = $this->auth->getUser();
+        
+        $dbConnection = $this->dbManager->getConnection();
+
+        $userId = $this->auth->getUser()->getId();
+        
+        $sqlGetEmployees = "SELECT * FROM employees WHERE id = {$userId} LIMIT 1";
+        $result = $dbConnection->query($sqlGetEmployees);
+
+        $userData = $result[0];
+
+        $data = [
+            'title' => 'Профиль',
+            'company_name' => 'YadroPHP',
+            'user_session' => [
+                'role' => $user->getRole(),
+                'name' => $user->getName(),
+                'email' => $user->getEmail(),
+                'avatar' => $user->getAvatar()
+            ],
+
+            'user_data' => $userData,
+
+            'breadcrumbs' => [
+                [
+                    'name'  => 'folder',
+                    'title' => 'Профиль',
+                    'link'  => '/profile'
+                ],
+                [
+                    'name'  => 'subfolder_1',
+                    'title' => 'Редактирование'
+                ]
+            ]
+        ];
+
+        return $this->render('pages/profile_edit.html.php', $data);
     }
 }
 ```
@@ -547,19 +647,7 @@ class CreateUsersTable
             └── profiles/ # Профайлы производительности
 ```
 
-### 🎯 Сравнение с другими фреймворками
-
-| Функция | YadroPHP | Laravel | Symfony | Slim |
-|---------|----------|---------|---------|------|
-| **Размер ядра** | ~500 КБ | ~30 МБ | ~40 МБ | ~2 МБ |
-| **Время инициализации** | 1-3 мс | 50-100 мс | 70-150 мс | 5-10 мс |
-| **Потребление памяти** | 5-15 МБ | 40-80 МБ | 50-100 МБ | 10-25 МБ |
-| **Требуемая версия PHP** | 8.5+ | 8.1+ | 8.2+ | 8.0+ |
-| **Встроенная безопасность** | CSP, CORS, CSRF | Базовая | Базовая | Минимальная |
-| **JIT поддержка** | Да (оптимизировано) | Да | Да | Нет |
-| **Российская поддержка** | Прямая | Через сообщество | Через сообщество | Через сообщество |
-
-### 📚 Документация
+### 📚 Документация (скоро)
 
 Полная документация доступна на сайте: [yadrophp.ru](https://yadrophp.ru)
 
@@ -588,7 +676,6 @@ class CreateUsersTable
 5. **🗃️ Работа с базой данных**
    - Подключение MySQL
    - Выполнение запросов
-   - Миграции
    - Оптимизация запросов
 
 6. **⚡ Оптимизация производительности**
@@ -599,20 +686,18 @@ class CreateUsersTable
 
 7. **🎨 Frontend разработка**
    - Работа с шаблонами
-   - Assets управление
    - JavaScript интеграция
 
 8. **🚀 Деплоймент**
    - Настройка production
    - Мониторинг
-   - Резервное копирование
 
 9. **🔧 API Reference**
    - Классы и методы
    - Интерфейсы
    - Расширения
 
-### 🤝 Поддержка и сообщество
+### 🤝 Поддержка и сообщество (скоро)
 
 #### Официальные каналы:
 - **🌐 Официальный сайт:** [yadrophp.ru](https://yadrophp.ru)
@@ -622,12 +707,11 @@ class CreateUsersTable
 #### Сообщества:
 - **💬 VK сообщество:** [vk.com/yadrophp](https://vk.com/yadrophp) - Основное сообщество
 - **📱 Telegram канал:** [@yadrophp](https://t.me/yadrophp) - Анонсы и новости
-- **💭 Max сообщество:** [max.im/yadrophp](https://max.im/yadrophp) - Обсуждение и помощь
 - **📚 Документация:** [docs.yadrophp.ru](https://docs.yadrophp.ru) - Полная документация
 
 #### Поддержка разработки:
 - **🐛 Баг-репорты:** [GitHub Issues](https://github.com/yadrophp/framework/issues)
-- **💡 Запросы функций:** [GitHub Discussions](https://github.com/yadrophp/framework/discussions)
+- **💡 Запросы функций:** [GitHub Discussions](https://github.com/YadroPHP/framework/discussions)
 - **👥 Контрибьютинг:** [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ### 🛣️ Roadmap
@@ -640,32 +724,20 @@ class CreateUsersTable
 - [x] Базовая безопасность (CSP, CORS, CSRF)
 - [x] Работа с MySQL
 - [x] Шаблонизация
-- [x] CLI инструменты
+- [x] CLI-инструменты
 - [x] Инструменты разработки
 
-#### Версия 1.1 (Q1 2024)
+#### Версия 1.1 (Q1 2025)
 - [ ] Поддержка PostgreSQL
 - [ ] Очереди задач (Queue)
 - [ ] Отправка email
 - [ ] Расширенная аутентификация (JWT, OAuth2)
 - [ ] GraphQL поддержка
-- [ ] Docker-образы
-- [ ] Unit тесты покрытие 80%
 
-#### Версия 1.2 (Q2 2024)
+#### Версия 1.2 (Q2 2025)
 - [ ] Поддержка Redis
 - [ ] WebSocket сервер
-- [ ] Микросервисная архитектура
-- [ ] Мониторинг и метрики
 - [ ] Internationalization (i18n)
-- [ ] Админ-панель генератор
-
-#### Версия 2.0 (Q3 2024)
-- [ ] PHP 8.6+ поддержка
-- [ ] Фиберы (Fibers) поддержка
-- [ ] AI-интеграции
-- [ ] Модульная архитектура
-- [ ] Marketplace пакетов
 - [ ] Полная документация на английском
 
 ### 👥 Участие в разработке
